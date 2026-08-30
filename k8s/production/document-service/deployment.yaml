@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: document-service
+  namespace: production
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: document-service
+  template:
+    metadata:
+      labels:
+        app: document-service
+    spec:
+      containers:
+      - name: document-service
+        image: 323708468663.dkr.ecr.eu-west-1.amazonaws.com/document-service:latest
+        envFrom:
+        - secretRef:
+            name: document-service-k8s-secret
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi

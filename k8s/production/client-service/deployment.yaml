@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: client-service
+  namespace: production
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: client-service
+  template:
+    metadata:
+      labels:
+        app: client-service
+    spec:
+      containers:
+      - name: client-service
+        image: 323708468663.dkr.ecr.eu-west-1.amazonaws.com/client-service:latest
+        envFrom:
+        - secretRef:
+            name: client-service-k8s-secret
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi

@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: billing-service
+  namespace: production
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: billing-service
+  template:
+    metadata:
+      labels:
+        app: billing-service
+    spec:
+      containers:
+      - name: billing-service
+        image: 323708468663.dkr.ecr.eu-west-1.amazonaws.com/billing-service:latest
+        envFrom:
+        - secretRef:
+            name: billing-service-k8s-secret
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi

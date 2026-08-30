@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-service
+  namespace: production
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notification-service
+  template:
+    metadata:
+      labels:
+        app: notification-service
+    spec:
+      containers:
+      - name: notification-service
+        image: 323708468663.dkr.ecr.eu-west-1.amazonaws.com/notification-service:latest
+        envFrom:
+        - secretRef:
+            name: notification-service-k8s-secret
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi

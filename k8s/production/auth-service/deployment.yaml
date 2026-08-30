@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-service
+  namespace: production
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: auth-service
+  template:
+    metadata:
+      labels:
+        app: auth-service
+    spec:
+      containers:
+      - name: auth-service
+        image: 323708468663.dkr.ecr.eu-west-1.amazonaws.com/auth-service:latest
+        envFrom:
+        - secretRef:
+            name: auth-service-k8s-secret
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
