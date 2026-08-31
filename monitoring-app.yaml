@@ -1,0 +1,41 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: sliders-monitoring
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: kube-prometheus-stack
+    targetRevision: 62.3.0
+    helm:
+      releaseName: prometheus
+      values: |
+        grafana:
+          ingress:
+            enabled: true
+            ingressClassName: alb
+            annotations:
+              alb.ingress.kubernetes.io/scheme: internet-facing
+              alb.ingress.kubernetes.io/target-type: ip
+              alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS":443}]'
+              alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:eu-west-1:323708468663:certificate/7d933e72-2fe7-4d49-9903-30882e39be79
+              alb.ingress.kubernetes.io/ssl-redirect: '443'
+              
+              # NEW: Matches the API Gateway group name exactly
+              alb.ingress.kubernetes.io/group.name: sliders-shared-alb
+            hosts:
+              - grafana.firmlyapp.com
+            paths:
+              - /
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

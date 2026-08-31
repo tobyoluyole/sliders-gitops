@@ -6,12 +6,12 @@ metadata:
   annotations:
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip 
-    
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS":443}]'
-    
     alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:eu-west-1:323708468663:certificate/7d933e72-2fe7-4d49-9903-30882e39be79
-    
     alb.ingress.kubernetes.io/ssl-redirect: '443'
+    
+    # NEW: Groups this ingress into a shared ALB
+    alb.ingress.kubernetes.io/group.name: sliders-shared-alb
 spec:
   ingressClassName: alb
   rules:
