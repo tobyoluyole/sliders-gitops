@@ -26,7 +26,7 @@ spec:
               # NEW: Matches the API Gateway group name exactly
               alb.ingress.kubernetes.io/group.name: sliders-shared-alb
             hosts:
-              - grafana.firmlyapp.com
+              - grafana.sliderapp.com
             paths:
               - /
   destination:
