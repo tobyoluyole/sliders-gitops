@@ -1,8 +1,19 @@
 # Sliders Kubernetes GitOps
 
-Kubernetes manifests for deploying the Sliders microservices platform and its supporting services to Amazon EKS.
+A GitOps deployment platform for Sliders microservices on Amazon EKS. I designed and implemented the Kubernetes deployment configuration, Argo CD application structure, AWS Secrets Manager integration, persistent storage, and monitoring setup in this repository.
 
-This repository defines production application workloads, Redis and RabbitMQ data services, AWS Secrets Manager integration, persistent EBS storage, and public HTTPS access through an AWS Application Load Balancer.
+This repository contains the Kubernetes manifests and Argo CD application definitions. AWS infrastructure, IAM roles, and cluster add-ons are managed in a separate Terraform repository.
+
+The deployment separates application workloads, databases, monitoring, and shared infrastructure into distinct namespaces and Argo CD applications. The configuration has been deployed and verified on a staging EKS cluster, with application workloads running in the `production` namespace.
+
+## Platform capabilities
+
+- GitOps deployment with Argo CD, including automatic synchronization and self-healing
+- Deployment of an API gateway and seven application services
+- Kubernetes secret synchronization from AWS Secrets Manager using External Secrets Operator
+- Persistent storage for Redis and RabbitMQ using Amazon EBS gp3 volumes
+- HTTPS ingress through an AWS Application Load Balancer and ACM certificate
+- Prometheus, Grafana, and Alertmanager deployment through the kube-prometheus-stack Helm chart
 
 ## Architecture
 
@@ -36,6 +47,11 @@ Amazon EBS (gp3) --------------------------------> Persistent Volumes
 .
 |-- aws-secret-store.yaml     # AWS Secrets Manager provider
 |-- gp3-storageclass.yaml     # Default Amazon EBS gp3 storage class
+|-- monitoring-app.yaml      # Argo CD application for monitoring
+|-- argocd
+|   |-- infrastructure-app.yaml # Root infrastructure manifests
+|   |-- databases-app.yaml      # Redis and RabbitMQ workloads
+|   `-- production-app.yaml     # Production namespace workloads
 `-- k8s
     |-- databases
     |   |-- rabbitmq          # Deployment, Service, PVC and ExternalSecret
@@ -51,34 +67,37 @@ Amazon EBS (gp3) --------------------------------> Persistent Volumes
         `-- user-service
 ```
 
-Application workloads use the `production` namespace. Redis and RabbitMQ use the `databases` namespace.
+Application workloads use the `production` namespace. Redis and RabbitMQ use `databases`, monitoring uses `monitoring`, and Argo CD applications live in `argocd`.
 
 ## Prerequisites
 
 - An existing Amazon EKS cluster
 - `kubectl` configured for the target cluster
+- Argo CD installed in the `argocd` namespace, with access to your Git repository
 - AWS CLI access to the target AWS account
 - AWS Load Balancer Controller
 - External Secrets Operator
 - Amazon EBS CSI Driver
 - Application images pushed to Amazon ECR
 - Required values created in AWS Secrets Manager
-- A DNS record and ACM certificate for the public API hostname
+- DNS records and an ACM certificate covering the API and Grafana hostnames
 
-The current manifests target AWS region `eu-west-1`.
+The current manifests target AWS region `eu-west-1`. Application source code and container builds are outside this repository; you need compatible images and their expected configuration to run the full platform.
 
 ## Configuration
 
-Review these environment-specific values before deployment:
+If you fork this project, update these values for your own environment before deploying:
 
 - ECR account ID, region, repository and image tag in each `deployment.yaml`
+- Git repository URLs and target revisions in `argocd/`
 - AWS region in `aws-secret-store.yaml`
 - Hostname and ACM certificate ARN in `k8s/production/api-gateway/ingress.yaml`
+- Grafana hostname and ACM certificate ARN in `monitoring-app.yaml`
 - Replica counts and resource requests
 - Redis and RabbitMQ PVC sizes
 - AWS Secrets Manager names
 
-The deployments currently use the mutable `latest` image tag. Immutable version tags or image digests are recommended for reproducible releases.
+The AWS identifiers and hostnames in these manifests belong to my project environment. They are configuration examples, not shared infrastructure for forks.
 
 ## Secrets
 
@@ -104,35 +123,31 @@ The `ClusterSecretStore` does not contain static AWS credentials. Configure EKS 
 
 ## Deployment
 
-### 1. Create the namespaces
+### GitOps deployment with Argo CD
+
+After configuring the prerequisites and pushing your customized manifests to your repository, confirm the target cluster and bootstrap the applications:
 
 ```bash
-kubectl create namespace production
-kubectl create namespace databases
+kubectl config current-context
+kubectl apply -f argocd/
 ```
 
-Skip a command if its namespace already exists.
+`sliders-infrastructure` tracks `main` and automatically syncs exactly the three root manifests: `aws-secret-store.yaml`, `gp3-storageclass.yaml`, and `monitoring-app.yaml`. The monitoring application then deploys its Helm chart into the `monitoring` namespace.
 
-### 2. Apply cluster-level resources
+`sliders-databases` recursively syncs `k8s/databases` from `main` into the `databases` namespace. `sliders-production` recursively syncs `k8s/production` from the repository's default branch (`HEAD`) into the `production` namespace. Both applications enable automatic pruning, self-healing, and namespace creation. All applications target the cluster where Argo CD is installed.
+
+The files under `argocd/` are bootstrap definitions. Reapply them yourself or through a deployment pipeline when they change; pushing changes to these files alone does not update the live Application resources.
+
+Commit and push future manifest changes so Argo CD can reconcile them. Automatic pruning is disabled for the infrastructure application; removing a shared resource from Git requires explicit cleanup. The monitoring application retains its own pruning policy.
 
 ```bash
-kubectl apply -f gp3-storageclass.yaml
-kubectl apply -f aws-secret-store.yaml
+kubectl get applications -n argocd
+kubectl get clustersecretstore aws-secrets-manager
+kubectl get storageclass gp3
+kubectl get pods -n monitoring
 ```
 
-> The gp3 manifest marks itself as the cluster's default StorageClass. Review any existing default before applying it.
-
-### 3. Deploy Redis and RabbitMQ
-
-```bash
-kubectl apply --recursive -f k8s/databases/
-```
-
-### 4. Deploy the application
-
-```bash
-kubectl apply --recursive -f k8s/production/
-```
+The gp3 manifest marks itself as the cluster's default StorageClass. Review the existing default when adapting the project to another cluster.
 
 ## Verification
 
@@ -165,7 +180,7 @@ kubectl get ingress sliders-public-ingress -n production
 1. Build and push a new image to the service's ECR repository.
 2. Update the image tag or digest in its `deployment.yaml`.
 3. Commit and push the manifest change.
-4. Apply it directly or let the GitOps controller reconcile it.
+4. Let Argo CD reconcile the workload changes.
 5. Confirm the deployment rollout.
 
 ## Security notes
@@ -175,10 +190,4 @@ kubectl get ingress sliders-public-ingress -n production
 - Keep the RabbitMQ management interface private.
 - Prefer immutable image tags and enable ECR image scanning.
 
-## Contributing
 
-Keep each service in its own directory and follow the existing manifest naming convention. Validate changes before opening a pull request:
-
-```bash
-kubectl apply --dry-run=client --recursive -f k8s/
-```
